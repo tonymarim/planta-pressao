@@ -1,0 +1,269 @@
+[
+  {
+    "id": "aula12-pc1",
+    "type": "tab",
+    "label": "Aula 12 — PC1 transmissor",
+    "disabled": false,
+    "info": "PC1 gera pressão, ESP32 transmite ESP-NOW. Inicia pausado. Painel em /; APIs em /api/."
+  },
+  {
+    "id": "tick",
+    "type": "inject",
+    "z": "aula12-pc1",
+    "name": "Amostra a cada 500 ms",
+    "x": 170,
+    "y": 100,
+    "props": [
+      {
+        "p": "topic",
+        "vt": "str"
+      }
+    ],
+    "topic": "tick",
+    "repeat": "0.5",
+    "once": false,
+    "wires": [
+      [
+        "controller"
+      ]
+    ]
+  },
+  {
+    "id": "state",
+    "type": "http in",
+    "z": "aula12-pc1",
+    "name": "GET /api/state",
+    "x": 160,
+    "y": 180,
+    "url": "/api/state",
+    "method": "get",
+    "upload": false,
+    "wires": [
+      [
+        "state-topic"
+      ]
+    ]
+  },
+  {
+    "id": "state-topic",
+    "type": "change",
+    "z": "aula12-pc1",
+    "name": "Consultar estado",
+    "x": 365,
+    "y": 180,
+    "rules": [
+      {
+        "t": "set",
+        "p": "topic",
+        "pt": "msg",
+        "to": "state",
+        "tot": "str"
+      }
+    ],
+    "wires": [
+      [
+        "controller"
+      ]
+    ]
+  },
+  {
+    "id": "control",
+    "type": "http in",
+    "z": "aula12-pc1",
+    "name": "POST /api/control",
+    "x": 160,
+    "y": 240,
+    "url": "/api/control",
+    "method": "post",
+    "upload": false,
+    "wires": [
+      [
+        "control-topic"
+      ]
+    ]
+  },
+  {
+    "id": "control-topic",
+    "type": "change",
+    "z": "aula12-pc1",
+    "name": "Comando do painel",
+    "x": 365,
+    "y": 240,
+    "rules": [
+      {
+        "t": "set",
+        "p": "topic",
+        "pt": "msg",
+        "to": "control",
+        "tot": "str"
+      }
+    ],
+    "wires": [
+      [
+        "controller"
+      ]
+    ]
+  },
+  {
+    "id": "serial-in",
+    "type": "serial in",
+    "z": "aula12-pc1",
+    "name": "Retorno da ESP32",
+    "x": 170,
+    "y": 320,
+    "serial": "serial-config",
+    "wires": [
+      [
+        "serial-topic"
+      ]
+    ]
+  },
+  {
+    "id": "serial-topic",
+    "type": "change",
+    "z": "aula12-pc1",
+    "name": "Identificar retorno",
+    "x": 365,
+    "y": 320,
+    "rules": [
+      {
+        "t": "set",
+        "p": "topic",
+        "pt": "msg",
+        "to": "serial",
+        "tot": "str"
+      }
+    ],
+    "wires": [
+      [
+        "controller"
+      ]
+    ]
+  },
+  {
+    "id": "controller",
+    "type": "function",
+    "z": "aula12-pc1",
+    "name": "Gerar, validar e acompanhar TX",
+    "x": 630,
+    "y": 180,
+    "func": "// Corpo do nó Function do Node-RED; também executado pelos testes em VM.\nconst now = Date.now();\nlet s = context.get('state') || {\n  running: false, mode: 'AUTO', fixed: 5, team: 1, pressure: 5, seq: 0,\n  generated: 0, submitted: 0, completed: 0, failed: 0, invalid: 0,\n  port: '', connected: false, lastHeartbeat: 0, device: null, pending: null,\n  latest: null, lastTx: null, history: [], log: [], error: ''\n};\nlet serial = null, config = null, response = null;\nfunction log(text) { s.log.unshift({time: now, text}); s.log = s.log.slice(0, 15); }\nfunction fresh() { return s.connected && s.lastHeartbeat > 0 && now - s.lastHeartbeat < 2500; }\nfunction view() {\n  return {...s, ready: fresh(), ageMs: s.lastHeartbeat ? now - s.lastHeartbeat : null,\n    receiverVerified: false, channel: 6, destination: 'FF:FF:FF:FF:FF:FF'};\n}\nif (msg.topic === 'control') {\n  const b = msg.payload || {};\n  let error = '';\n  switch (b.action) {\n    case 'connect':\n      if (typeof b.port !== 'string' || !/^COM[1-9][0-9]{0,3}$/i.test(b.port.trim())) { error = 'Informe uma porta como COM3.'; break; }\n      s.port = b.port.trim().toUpperCase(); s.connected = true;\n      s.lastHeartbeat = 0; s.device = null; s.pending = null; s.error = '';\n      config = {payload: {serialport: s.port, serialbaud: 115200, databits: 8, parity: 'none', stopbits: 1, enabled: true}};\n      log('Abertura solicitada: ' + s.port + '. Aguardando ESP32.');\n      break;\n    case 'disconnect':\n      s.connected = false; s.lastHeartbeat = 0; s.pending = null; s.running = false;\n      config = {payload: {enabled: false}}; log('Serial liberada; geração pausada.'); break;\n    case 'start': s.running = true; log('Geração iniciada.'); break;\n    case 'pause': s.running = false; log('Geração pausada.'); break;\n    case 'configure':\n      if (!['AUTO','TESTE'].includes(b.mode) || !Number.isInteger(b.team) || b.team < 1 || b.team > 999 ||\n          typeof b.pressure !== 'number' || !Number.isFinite(b.pressure) || b.pressure < 0 || b.pressure > 10) {\n        error = 'Equipe: inteiro de 1 a 999; pressão: número de 0 a 10; modo: AUTO ou TESTE.'; break;\n      }\n      s.mode = b.mode; s.fixed = Math.round(b.pressure * 100) / 100; s.team = b.team;\n      log('Configuração aplicada: equipe ' + s.team + ', ' + s.mode); break;\n    default: error = 'Ação desconhecida.';\n  }\n  response = {...msg, statusCode: error ? 400 : 200, payload: error ? {error} : view(), headers: {'Cache-Control':'no-store'}};\n} else if (msg.topic === 'serial') {\n  try {\n    const p = JSON.parse(String(msg.payload).trim());\n    if (!s.connected) return [null, null, null];\n    if (p.type === 'ready' && p.protocol === 'AULA12-PC1-V1' && p.channel === 6 && typeof p.mac === 'string') {\n      if (s.device && s.device.boot !== p.boot) { s.pending = null; log('ESP32 reiniciada.'); }\n      s.device = p; s.lastHeartbeat = now; s.error = '';\n      // Não repetir um comando de resultado desconhecido. Liberar somente quando o firmware estiver ocioso.\n      if (s.pending && now - s.pending.at > 2000 && p.busy === false) {\n        s.failed++; log('Resultado não recebido para seq ' + s.pending.seq); s.pending = null;\n      }\n    } else if (p.type === 'tx' && s.pending && p.seq === s.pending.seq && p.equipe === s.pending.team &&\n               typeof p.ok === 'boolean' && Number.isFinite(p.p_bar) && p.p_bar >= 0 && p.p_bar <= 10) {\n      s.lastTx = {...p, receivedAt: now};\n      if (p.ok) s.completed++; else s.failed++;\n      s.pending = null;\n      if (!p.ok) { s.error = p.error || 'Falha de envio ESP-NOW'; log(s.error); }\n    } else if (p.type === 'error') {\n      s.error = String(p.error || 'Erro no firmware'); log(s.error);\n    } else { s.invalid++; }\n  } catch { s.invalid++; }\n} else if (msg.topic === 'tick' && s.running) {\n  s.pressure = s.mode === 'TESTE' ? s.fixed : Math.round(Math.max(0, Math.min(10, s.pressure + (Math.random() * 0.3 - 0.15))) * 100) / 100;\n  s.seq = s.seq >= 4294967294 ? 1 : s.seq + 1;\n  s.generated++;\n  s.latest = {seq: s.seq, equipe: s.team, p_bar: s.pressure, modo: s.mode, at: now};\n  s.history.push(s.pressure); s.history = s.history.slice(-60);\n  if (fresh() && !s.pending && s.device.busy === false) {\n    serial = {payload: `P,${s.team},${s.seq},${s.pressure.toFixed(2)},${s.mode}\\n`};\n    s.pending = {seq: s.seq, team: s.team, at: now}; s.submitted++;\n  }\n} else if (msg.topic === 'state') {\n  response = {...msg, payload: view(), headers: {'Cache-Control':'no-store'}};\n}\ncontext.set('state', s);\nnode.status({fill: fresh() ? 'green' : 'grey', shape: 'dot', text: fresh() ? (s.running ? 'Gerando / ESP32 disponível' : 'ESP32 disponível / pausado') : 'Sem ESP32 confirmada'});\nreturn [serial, config, response];\n",
+    "outputs": 3,
+    "timeout": 0,
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "wires": [
+      [
+        "serial-out"
+      ],
+      [
+        "serial-control"
+      ],
+      [
+        "http-response"
+      ]
+    ]
+  },
+  {
+    "id": "serial-out",
+    "type": "serial out",
+    "z": "aula12-pc1",
+    "name": "Comando USB → ESP32",
+    "x": 960,
+    "y": 100,
+    "serial": "serial-config",
+    "wires": []
+  },
+  {
+    "id": "serial-control",
+    "type": "serial control",
+    "z": "aula12-pc1",
+    "name": "Abrir / liberar USB",
+    "x": 960,
+    "y": 180,
+    "serial": "serial-config",
+    "wires": []
+  },
+  {
+    "id": "http-response",
+    "type": "http response",
+    "z": "aula12-pc1",
+    "name": "Responder ao painel",
+    "x": 960,
+    "y": 260,
+    "statusCode": "",
+    "headers": {},
+    "wires": []
+  },
+  {
+    "id": "panel",
+    "type": "http in",
+    "z": "aula12-pc1",
+    "name": "GET /",
+    "x": 160,
+    "y": 440,
+    "url": "/",
+    "method": "get",
+    "upload": false,
+    "wires": [
+      [
+        "html"
+      ]
+    ]
+  },
+  {
+    "id": "html",
+    "type": "template",
+    "z": "aula12-pc1",
+    "name": "Painel PC1",
+    "x": 410,
+    "y": 440,
+    "field": "payload",
+    "fieldType": "msg",
+    "format": "html",
+    "syntax": "plain",
+    "template": "<!doctype html>\n<html lang=\"pt-BR\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>Aula 12 · PC1 Transmissor</title>\n<style>\n:root{color-scheme:dark;font-family:Segoe UI,Arial,sans-serif;background:#0b141d;color:#e5eef6}*{box-sizing:border-box}body{margin:0}header{padding:26px 4vw;border-bottom:1px solid #304151;background:#111f2b;display:flex;justify-content:space-between;align-items:center;gap:16px}h1{font-size:26px;margin:5px 0}h2{font-size:18px;margin-top:0}.eyebrow{color:#60d8c6;letter-spacing:2px;font-size:12px}a{color:#79daca}main{max-width:1400px;margin:auto;padding:24px 4vw}.banner{padding:13px 18px;background:#243243;border-left:4px solid #efa750;margin-bottom:22px}.grid{display:grid;grid-template-columns:1.5fr 1fr;gap:22px}.card{background:#142330;border:1px solid #304557;border-radius:12px;padding:22px;margin-bottom:20px}.row{display:flex;gap:12px;flex-wrap:wrap;align-items:end}.field{flex:1;min-width:120px}label{display:block;color:#b5c9da;font-size:13px;margin-bottom:7px}input,select,button{font:inherit;border-radius:6px;padding:11px;border:1px solid #526778}input,select{background:#0b1722;color:white;width:100%}button{background:#2b4b60;color:white;cursor:pointer;margin-top:12px}button.primary{background:#237d71;border-color:#53c7b5}button:hover{filter:brightness(1.2)}button:disabled{opacity:.5;cursor:wait}.muted{color:#a9becf;font-size:13px;line-height:1.6}.number{font-size:55px;font-weight:650;letter-spacing:-2px}.unit{font-size:18px;color:#a4bece}.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:9px;margin-top:18px}.stat{background:#0d1924;padding:14px 9px;border-radius:8px}.stat strong{display:block;font-size:22px}.stat span{font-size:11px;color:#b0c5d5}svg{width:100%;display:block}.tag{background:#243b4b;border-radius:20px;padding:8px 13px;font-size:12px}pre{white-space:pre-wrap;word-break:break-word;font-size:12px;line-height:1.5;background:#0b1722;padding:14px;min-height:60px}.log{padding-left:18px;font-size:12px;color:#b5c9da;line-height:1.8}#message{min-height:24px;color:#ffd096;margin:12px 0}#connection{font-weight:600}footer{color:#8fa9bd;font-size:12px;margin:16px 0}.pressure{display:flex;justify-content:space-between;align-items:center}@media(max-width:850px){.grid{grid-template-columns:1fr}header{align-items:start;flex-direction:column}.stats{grid-template-columns:repeat(2,1fr)}}\n</style></head><body>\n<header><div><div class=\"eyebrow\">COMISSIONAMENTO VIRTUAL / AULA 12</div><h1>PC1 · Estação transmissora</h1><div class=\"muted\">TK-101 · Reservatório de ar comprimido</div></div><a href=\"/red/\" target=\"_blank\" rel=\"noopener\">Abrir fluxo Node-RED ↗</a></header>\n<main><div class=\"banner\" id=\"banner\">Processo simulado. A recepção no PC2 ainda não é verificada.</div><div class=\"grid\"><section>\n<div class=\"card\"><div class=\"pressure\"><div><div class=\"eyebrow\">PRESSÃO GERADA NO PC1</div><span class=\"number\" id=\"pressure\">—</span> <span class=\"unit\">bar(g)</span></div><span class=\"tag\" id=\"modeLabel\">PAUSADO</span></div>\n<svg viewBox=\"0 0 700 270\" role=\"img\" aria-label=\"Reservatório industrial ilustrativo e caminho de transmissão\"><defs><linearGradient id=\"steel\"><stop stop-color=\"#455c6e\"/><stop offset=\".45\" stop-color=\"#9eb0ba\"/><stop offset=\"1\" stop-color=\"#334b5c\"/></linearGradient></defs><path d=\"M30 241H670M30 252H670\" stroke=\"#314d61\"/><path d=\"M170 217V240M285 217V240\" stroke=\"#90a6b5\" stroke-width=\"13\"/><rect x=\"125\" y=\"60\" width=\"210\" height=\"161\" rx=\"75\" fill=\"url(#steel)\" stroke=\"#b9c9d3\" stroke-width=\"2\"/><path d=\"M335 142H390V208H440\" fill=\"none\" stroke=\"#6e8a9c\" stroke-width=\"13\"/><path d=\"M124 142H65V199\" fill=\"none\" stroke=\"#6e8a9c\" stroke-width=\"13\"/><rect x=\"40\" y=\"190\" width=\"60\" height=\"40\" rx=\"7\" fill=\"#2a5365\" stroke=\"#6e8a9c\"/><text x=\"178\" y=\"145\" fill=\"#102632\" font-size=\"24\" font-weight=\"bold\">TK-101</text><text x=\"168\" y=\"168\" fill=\"#203b4a\" font-size=\"12\">PRESSÃO SIMULADA</text><path d=\"M230 60V28H330\" stroke=\"#68cbb9\" fill=\"none\" stroke-width=\"3\"/><rect x=\"330\" y=\"10\" width=\"110\" height=\"40\" rx=\"7\" fill=\"#142c3b\" stroke=\"#68cbb9\"/><text x=\"348\" y=\"36\" fill=\"#9ff3de\" font-size=\"17\">PT-101</text><rect x=\"465\" y=\"85\" width=\"175\" height=\"105\" rx=\"10\" fill=\"#0b1923\" stroke=\"#4d7e97\"/><text x=\"485\" y=\"117\" fill=\"#b7dae9\" font-size=\"17\">ESP32 · USB</text><text x=\"485\" y=\"145\" fill=\"#62d8c1\" font-size=\"15\">ESP-NOW →</text><text x=\"485\" y=\"169\" fill=\"#93aaba\" font-size=\"12\">Canal 6 / broadcast</text></svg>\n<div class=\"muted\">Últimas 60 amostras geradas · escala fixa 0–10 bar</div><svg viewBox=\"0 0 600 110\" role=\"img\" aria-label=\"Tendência da pressão\"><path d=\"M0 5H600M0 55H600M0 105H600\" stroke=\"#2b4353\"/><polyline id=\"trend\" points=\"\" fill=\"none\" stroke=\"#5cdbc3\" stroke-width=\"3\"/></svg>\n<div class=\"stats\"><div class=\"stat\"><strong id=\"generated\">0</strong><span>GERADAS</span></div><div class=\"stat\"><strong id=\"submitted\">0</strong><span>ENVIADAS À USB</span></div><div class=\"stat\"><strong id=\"completed\">0</strong><span>RÁDIO: CONCLUÍDAS</span></div><div class=\"stat\"><strong id=\"failed\">0</strong><span>FALHAS / SEM RESULTADO</span></div></div><p class=\"muted\">“Rádio: concluídas” é o retorno do transmissor. Broadcast não confirma que outra placa recebeu. Sem ESP32, somente a simulação local funciona.</p></div>\n<div class=\"card\"><h2>Último retorno da ESP32</h2><div class=\"muted\" id=\"txAge\">Nenhum retorno recebido.</div><pre id=\"tx\">Aguardando transmissão.</pre><h2>Eventos</h2><ul class=\"log\" id=\"log\"></ul></div>\n</section><aside>\n<div class=\"card\"><h2>1. Conectar o transmissor</h2><label for=\"port\">Porta USB da ESP32</label><input id=\"port\" value=\"COM3\" placeholder=\"COM3\" maxlength=\"8\"><div class=\"row\"><button class=\"primary\" id=\"connect\">Conectar</button><button id=\"disconnect\">Liberar USB</button></div><p id=\"connection\">Sem ESP32 confirmada</p><div class=\"muted\" id=\"device\">Grave o firmware e feche o Monitor Serial.</div><p class=\"muted\">Antes de gravar a placa, clique em Liberar USB. A conexão pode reiniciar a ESP32; aguarde a identificação.</p></div>\n<div class=\"card\"><h2>2. Configurar a simulação</h2><div class=\"row\"><div class=\"field\"><label for=\"team\">Equipe</label><input id=\"team\" type=\"number\" min=\"1\" max=\"999\" value=\"1\"></div><div class=\"field\"><label for=\"mode\">Modo</label><select id=\"mode\"><option>AUTO</option><option>TESTE</option></select></div></div><label for=\"fixed\" style=\"margin-top:15px\">Pressão fixa no modo TESTE · bar(g)</label><input id=\"fixed\" type=\"number\" min=\"0\" max=\"10\" step=\"0.01\" value=\"5\"><button id=\"apply\">Aplicar configuração</button><p class=\"muted\">AUTO: variação aleatória de até ±0,15 bar por amostra. TESTE: valor fixo. Intervalo: 500 ms. Os valores alterados só entram em vigor após Aplicar.</p></div>\n<div class=\"card\"><h2>3. Gerar e transmitir</h2><div class=\"row\"><button class=\"primary\" id=\"start\">Iniciar</button><button id=\"pause\">Pausar</button></div><div id=\"message\" role=\"status\" aria-live=\"polite\"></div><p class=\"muted\">O envio pelo rádio exige a placa identificada e disponível. Não há fila de amostras antigas para transmitir após reconectar.</p></div>\n</aside></div><footer>PC1: Node-RED → USB serial → ESP32 → ESP-NOW. Processo didático; nenhum sensor físico é utilizado.</footer></main>\n<script>\nconst el = id => document.getElementById(id);\nlet polling = false;\nasync function action(data) {\n  try { const r = await fetch('/api/control',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)}); const body=await r.json(); if(!r.ok) throw Error(body.error || 'Falha na operação'); el('message').textContent='Solicitação aplicada.'; await update(); }\n  catch(e) {el('message').textContent=e.message;}\n}\nel('connect').onclick=()=>action({action:'connect',port:el('port').value});\nel('disconnect').onclick=()=>action({action:'disconnect'});\nel('start').onclick=()=>action({action:'start'});\nel('pause').onclick=()=>action({action:'pause'});\nel('apply').onclick=()=>action({action:'configure',team:Number(el('team').value),mode:el('mode').value,pressure:el('fixed').value.trim()===''?null:Number(el('fixed').value)});\nasync function update(){\n  if(polling)return; polling=true;\n  try {\n    const r=await fetch('/api/state',{cache:'no-store',signal:AbortSignal.timeout(2000)}); if(!r.ok)throw Error();const s=await r.json();\n    el('banner').textContent=s.ready?'ESP32 identificada · transmissão broadcast · recepção no PC2 não verificada.':'Simulação local disponível · sem ESP32 confirmada · não há transmissão pelo rádio.';\n    el('pressure').textContent=s.latest?s.latest.p_bar.toFixed(2).replace('.',','):'—';\n    el('modeLabel').textContent=(s.running?'GERANDO':'PAUSADO')+' / '+s.mode;\n    for(const key of ['generated','submitted','completed','failed'])el(key).textContent=s[key];\n    el('connection').textContent=s.ready?'ESP32 disponível':s.connected?'Aguardando ESP32 / sem comunicação':'USB liberada';\n    el('device').textContent=s.device?`MAC ${s.device.mac} · canal ${s.device.channel} · idade ${Math.round(s.ageMs)} ms`:'Grave o firmware e feche o Monitor Serial.';\n    el('trend').setAttribute('points',s.history.map((p,i)=>`${i*600/59},${105-p*10}`).join(' '));\n    el('tx').textContent=s.lastTx?JSON.stringify(s.lastTx,null,2):'Aguardando transmissão.';\n    el('txAge').textContent=s.lastTx?`Registro histórico: seq ${s.lastTx.seq} · ${new Date(s.lastTx.receivedAt).toLocaleTimeString('pt-BR')}`:'Nenhum retorno recebido.';\n    el('log').replaceChildren(...s.log.map(x=>{const li=document.createElement('li');li.textContent=new Date(x.time).toLocaleTimeString('pt-BR')+' — '+x.text;return li;}));\n  }catch{el('banner').textContent='SEM CONEXÃO COM NODE-RED · valores anteriores desatualizados';el('connection').textContent='Servidor indisponível';el('pressure').textContent='—';}\n  finally{polling=false;}\n}\nupdate();setInterval(update,500);\n</script></body></html>\n",
+    "output": "str",
+    "wires": [
+      [
+        "html-response"
+      ]
+    ]
+  },
+  {
+    "id": "html-response",
+    "type": "http response",
+    "z": "aula12-pc1",
+    "name": "Página HTML",
+    "x": 660,
+    "y": 440,
+    "statusCode": "200",
+    "headers": {
+      "Content-Type": "text/html; charset=utf-8",
+      "Cache-Control": "no-store"
+    },
+    "wires": []
+  },
+  {
+    "id": "serial-config",
+    "type": "serial-port",
+    "name": "ESP32 PC1 — configurar pelo painel",
+    "serialport": "COM0",
+    "serialbaud": "115200",
+    "databits": "8",
+    "parity": "none",
+    "stopbits": "1",
+    "waitfor": "",
+    "dtr": "none",
+    "rts": "none",
+    "cts": "none",
+    "dsr": "none",
+    "newline": "\\n",
+    "bin": "false",
+    "out": "char",
+    "addchar": "",
+    "responsetimeout": "2000"
+  }
+]

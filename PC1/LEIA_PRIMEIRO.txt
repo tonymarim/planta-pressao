@@ -1,0 +1,27 @@
+AULA 12 - TRANSMISSOR PC1 - ESP32 DEVKIT V1
+
+Execute estes passos NO COMPUTADOR ONDE A ESP32 ESTA CONECTADA.
+
+1. Extraia o ZIP para uma pasta local.
+2. Tenha Node.js (com npm) e Arduino IDE instalados.
+3. Abra ESP32_Transmissor/ESP32_Transmissor.ino na Arduino IDE.
+4. Selecione o pacote esp32 by Espressif Systems 3.3.11,
+   a placa DOIT ESP32 DEVKIT V1 e a porta COM3 (confira a porta real).
+5. Grave o firmware. Depois feche o Monitor Serial.
+6. Execute Iniciar_PC1.cmd. A primeira execucao precisa de Internet.
+7. Abra http://127.0.0.1:1881/ no navegador desse PC.
+8. No painel: COM3 -> Conectar -> aguardar ESP32 disponivel.
+9. Escolha AUTO -> Aplicar configuracao -> Iniciar.
+
+O PC gera a pressao. A placa envia por ESP-NOW no canal 6 em broadcast.
+Sem placa, funciona apenas a simulacao local.
+O receptor ainda nao foi implementado; sucesso no transmissor nao
+confirma que outra placa recebeu os dados.
+
+Para gravar novamente: clique em Liberar USB antes de usar a IDE.
+Para parar a geracao: Pausar. Para fechar o servidor: Ctrl+C no terminal.
+
+README.md: guia completo.
+VERIFICACAO.md: testes e limitacoes.
+Fluxo_PC1.json: fluxo importavel em outra instalacao Node-RED.
+firmware_compilado/: binarios de referencia para a DevKit V1.

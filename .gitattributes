@@ -1,0 +1,5 @@
+* text=auto
+*.cmd text eol=crlf
+*.bin -text -diff
+*.zip -text -diff
+PC2/public/** -text -diff -whitespace linguist-generated=true

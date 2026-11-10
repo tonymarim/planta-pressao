@@ -1,0 +1,207 @@
+[
+  {
+    "id": "aula12-pc2",
+    "type": "tab",
+    "label": "Aula 12 — PC2 receptor",
+    "disabled": false,
+    "info": "ESP32-C3 → USB → validação → alarmes → planta 3D. Painel em /, editor /red. Porta 1882."
+  },
+  {
+    "id": "pc2-tick",
+    "type": "inject",
+    "z": "aula12-pc2",
+    "name": "Validade / demonstração",
+    "x": 180,
+    "y": 80,
+    "props": [
+      {
+        "p": "topic",
+        "vt": "str"
+      }
+    ],
+    "topic": "tick",
+    "repeat": "0.5",
+    "once": false,
+    "wires": [
+      [
+        "pc2-controller"
+      ]
+    ]
+  },
+  {
+    "id": "pc2-rx",
+    "type": "serial in",
+    "z": "aula12-pc2",
+    "name": "ESP32-C3 / USB",
+    "x": 170,
+    "y": 170,
+    "serial": "pc2-port",
+    "wires": [
+      [
+        "pc2-rx-topic"
+      ]
+    ]
+  },
+  {
+    "id": "pc2-rx-topic",
+    "type": "change",
+    "z": "aula12-pc2",
+    "name": "Amostra de rádio",
+    "x": 390,
+    "y": 170,
+    "rules": [
+      {
+        "t": "set",
+        "p": "topic",
+        "pt": "msg",
+        "to": "serial",
+        "tot": "str"
+      }
+    ],
+    "wires": [
+      [
+        "pc2-controller"
+      ]
+    ]
+  },
+  {
+    "id": "pc2-state",
+    "type": "http in",
+    "z": "aula12-pc2",
+    "name": "GET /api/state",
+    "x": 170,
+    "y": 280,
+    "url": "/api/state",
+    "method": "get",
+    "upload": false,
+    "wires": [
+      [
+        "pc2-state-topic"
+      ]
+    ]
+  },
+  {
+    "id": "pc2-state-topic",
+    "type": "change",
+    "z": "aula12-pc2",
+    "name": "Estado atual",
+    "x": 390,
+    "y": 280,
+    "rules": [
+      {
+        "t": "set",
+        "p": "topic",
+        "pt": "msg",
+        "to": "state",
+        "tot": "str"
+      }
+    ],
+    "wires": [
+      [
+        "pc2-controller"
+      ]
+    ]
+  },
+  {
+    "id": "pc2-control",
+    "type": "http in",
+    "z": "aula12-pc2",
+    "name": "POST /api/control",
+    "x": 170,
+    "y": 360,
+    "url": "/api/control",
+    "method": "post",
+    "upload": false,
+    "wires": [
+      [
+        "pc2-control-topic"
+      ]
+    ]
+  },
+  {
+    "id": "pc2-control-topic",
+    "type": "change",
+    "z": "aula12-pc2",
+    "name": "Comando do operador",
+    "x": 390,
+    "y": 360,
+    "rules": [
+      {
+        "t": "set",
+        "p": "topic",
+        "pt": "msg",
+        "to": "control",
+        "tot": "str"
+      }
+    ],
+    "wires": [
+      [
+        "pc2-controller"
+      ]
+    ]
+  },
+  {
+    "id": "pc2-controller",
+    "type": "function",
+    "z": "aula12-pc2",
+    "name": "Validar, filtrar, alarmar e intertravar",
+    "x": 680,
+    "y": 200,
+    "func": "// Corpo do nó Function. Estado exclusivamente em memória; DEMO e rádio são separados.\nconst now = Date.now();\nconst macPattern = /^([0-9A-F]{2}:){5}[0-9A-F]{2}$/;\nlet s = context.get('state') || {\n  source:'LIVE', connected:false, port:'COM5', team:1, configuredMac:'', lockedMac:'',\n  receiver:null, heartbeat:0, received:0, rejected:0, duplicate:0, gaps:0,\n  sample:null, lastAt:0, history:[], window:[], average:null, session:null, retired:[],\n  high:false, highHigh:false, blocked:true, compressor:false, acknowledged:false,\n  quality:'DESCONHECIDO', events:[], demoPressure:5, demoSeq:0, demoRunning:false, error:''\n};\nlet config=null, response=null;\nfunction event(text){s.events.unshift({at:now,text});s.events=s.events.slice(0,40);}\nfunction fresh(){return s.sample!==null && now-s.lastAt<=3000 && (s.source==='DEMO'||s.connected);}\nfunction trip(reason){if(!s.blocked||s.compressor)event(reason);s.blocked=true;s.compressor=false;}\nfunction freshness(){\n  const q=fresh()?'VALIDO':s.sample?'SEM_DADOS':'DESCONHECIDO';\n  if(q!==s.quality){\n    event(q==='VALIDO'?'Telemetria válida.':'Dados ausentes ou vencidos.');\n    if(q!=='VALIDO'){trip('Intertravamento por perda de dados.');s.window=[];s.acknowledged=false;}\n  }\n  s.quality=q;\n}\nfunction clearStream(){\n  s.sample=null;s.lastAt=0;s.history=[];s.window=[];s.average=null;s.session=null;s.retired=[];\n  s.high=false;s.highHigh=false;s.blocked=true;s.compressor=false;s.acknowledged=false;\n  s.quality='DESCONHECIDO';s.lockedMac=s.configuredMac;s.received=0;s.rejected=0;s.duplicate=0;s.gaps=0;\n}\nfunction accept(p,mac,rssi,age=0){\n  if(!p||p.v!==1||p.tanque!=='TK-101'||!Number.isInteger(p.equipe)||p.equipe!==s.team||\n    !Number.isInteger(p.boot)||p.boot<0||p.boot>4294967295||\n    !Number.isInteger(p.seq)||p.seq<1||p.seq>4294967294||\n    !Number.isInteger(p.t_ms)||p.t_ms<0||p.t_ms>4294967295||\n    typeof p.p_bar!=='number'||!Number.isFinite(p.p_bar)||p.p_bar<0||p.p_bar>10||\n    !['AUTO','TESTE'].includes(p.modo)||!macPattern.test(mac)||\n    !Number.isFinite(age)||age<0||age>1500||!Number.isFinite(rssi)||rssi>0||rssi< -127){s.rejected++;return;}\n  if(s.lockedMac && s.lockedMac!==mac){s.rejected++;return;}\n  const key=mac+':'+p.boot;\n  if(s.retired.includes(key)){s.duplicate++;return;}\n  if(s.session===key && p.seq<=s.sample.seq){s.duplicate++;return;}\n  if(s.session!==key){\n    if(s.session){s.retired.push(s.session);s.retired=s.retired.slice(-32);}\n    s.session=key;s.window=[];event('Nova sessão do emissor: '+p.boot);\n  }else if(s.sample && p.seq>s.sample.seq+1){s.gaps+=p.seq-s.sample.seq-1;}\n  if(!s.lockedMac){s.lockedMac=mac;event('Origem vinculada: '+mac);}\n  if(!fresh())s.window=[];\n  s.sample={...p,mac,rssi};s.lastAt=now-age;s.received++;\n  s.window.push(p.p_bar);s.window=s.window.slice(-5);\n  s.average=s.window.reduce((a,b)=>a+b,0)/s.window.length;\n  s.history.push({at:s.lastAt,p:p.p_bar,avg:s.average});s.history=s.history.slice(-120);\n  const h=s.high, hh=s.highHigh;\n  if(p.p_bar>=7)s.high=true;else if(p.p_bar<=6.7)s.high=false;\n  if(p.p_bar>=8.5)s.highHigh=true;else if(p.p_bar<=8.2)s.highHigh=false;\n  if(h!==s.high){event(s.high?'Alarme alto: pressão ≥ 7 bar.':'Condição de pressão alta encerrada.');if(s.high)s.acknowledged=false;}\n  if(hh!==s.highHigh){event(s.highHigh?'Alarme muito alto: pressão ≥ 8,5 bar.':'Condição muito alta encerrada; bloqueio retido.');if(s.highHigh)s.acknowledged=false;}\n  if(s.highHigh)trip('Compressor virtual bloqueado por pressão muito alta.');\n  freshness();\n}\nfunction view(){freshness();return {...s,now,ageMs:s.sample?Math.max(0,now-s.lastAt):null,\n  pressure:fresh()?s.sample.p_bar:null,mean:fresh()?s.average:null,\n  receiverOnline:s.connected&&now-s.heartbeat<2500&&s.heartbeat>0,\n  canReset:fresh()&&s.sample.p_bar<=6.7,channel:6};}\nfreshness();\nif(msg.topic==='serial' && s.source==='LIVE' && s.connected){\n  try{\n    const r=JSON.parse(String(msg.payload).trim());\n    if(r.type==='ready'&&r.protocol==='AULA12-PC2-V1'&&r.channel===6&&macPattern.test(r.mac)){\n      s.receiver=r;s.heartbeat=now;s.error='';\n    }else if(r.type==='rx'&&typeof r.data==='string'&&r.data.length<=250){\n      accept(JSON.parse(r.data),String(r.mac).toUpperCase(),r.rssi,r.age_ms);\n    }else if(r.type==='error'){s.error=String(r.error);event('Receptor: '+s.error);}\n    else s.rejected++;\n  }catch{s.rejected++;}\n}else if(msg.topic==='tick'){\n  if(s.source==='DEMO'&&s.demoRunning){\n    s.demoSeq++;\n    accept({v:1,equipe:s.team,tanque:'TK-101',boot:1,seq:s.demoSeq,t_ms:s.demoSeq*500,p_bar:s.demoPressure,modo:'TESTE'},'DE:00:00:00:00:01',-40,0);\n  }\n}else if(msg.topic==='control'){\n  const b=msg.payload||{};let error='';\n  switch(b.action){\n    case 'connect':\n      if(typeof b.port!=='string'||!/^COM[1-9][0-9]{0,3}$/i.test(b.port.trim())){error='Porta inválida. Exemplo: COM5.';break;}\n      if(s.source==='LIVE'&&s.connected&&s.port===b.port.trim().toUpperCase())break;\n      s.source='LIVE';s.connected=true;s.port=b.port.trim().toUpperCase();s.heartbeat=0;s.receiver=null;s.demoRunning=false;\n      clearStream();config={payload:{serialport:s.port,serialbaud:115200,databits:8,parity:'none',stopbits:1,enabled:true}};\n      event('Serial solicitada: '+s.port+'. Aguardando rádio.');break;\n    case 'disconnect':\n      s.connected=false;s.heartbeat=0;trip('USB liberada; compressor virtual bloqueado.');\n      config={payload:{enabled:false}};event('USB liberada.');break;\n    case 'filter':{\n      const mac=typeof b.mac==='string'?b.mac.trim().toUpperCase():'';\n      if(!Number.isInteger(b.team)||b.team<1||b.team>999||typeof b.mac!=='string'||(mac&&!macPattern.test(mac))){error='Equipe deve ser 1–999 e MAC vazio ou AA:BB:CC:DD:EE:FF.';break;}\n      if(s.source==='DEMO'){error='Volte ao rádio antes de alterar o filtro.';break;}\n      s.team=b.team;s.configuredMac=mac;clearStream();event('Filtro aplicado. Origem '+(mac||'automática na primeira amostra válida')+'.');break;\n    }\n    case 'ack':s.acknowledged=true;event('Operador reconheceu os alarmes; bloqueios mantidos.');break;\n    case 'reset':\n      if(!fresh()||s.sample.p_bar>6.7){error='Rearme exige leitura válida e pressão ≤ 6,7 bar.';break;}\n      s.blocked=false;event('Bloqueio rearmado; compressor permanece parado.');break;\n    case 'start':\n      if(!fresh()||s.blocked||s.highHigh){error='Partida bloqueada: confira dados e rearme.';break;}\n      s.compressor=true;event('Compressor virtual ligado.');break;\n    case 'stop':s.compressor=false;event('Compressor virtual parado.');break;\n    case 'demo':\n      s.connected=false;s.heartbeat=0;s.source='DEMO';clearStream();s.lockedMac='';s.demoSeq=0;s.demoRunning=true;s.demoPressure=5;\n      config={payload:{enabled:false}};event('DEMO local: nenhum dado de rádio é utilizado.');break;\n    case 'demoPressure':\n      if(s.source!=='DEMO'||typeof b.pressure!=='number'||!Number.isFinite(b.pressure)||b.pressure<0||b.pressure>10){error='Pressão DEMO inválida.';break;}\n      s.demoPressure=b.pressure;break;\n    case 'demoPause':s.demoRunning=false;break;\n    case 'demoResume':if(s.source==='DEMO')s.demoRunning=true;break;\n    default:error='Ação desconhecida.';\n  }\n  response={...msg,statusCode:error?400:200,payload:error?{error}:view(),headers:{'Cache-Control':'no-store'}};\n}else if(msg.topic==='state'){\n  response={...msg,payload:view(),headers:{'Cache-Control':'no-store'}};\n}\ncontext.set('state',s);\nnode.status({fill:s.quality==='VALIDO'?'green':'grey',shape:'dot',text:s.source+' / '+s.quality+' / '+s.received+' amostras'});\nreturn [config,response];\n",
+    "outputs": 2,
+    "timeout": 0,
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "wires": [
+      [
+        "pc2-serial-control"
+      ],
+      [
+        "pc2-response"
+      ]
+    ]
+  },
+  {
+    "id": "pc2-serial-control",
+    "type": "serial control",
+    "z": "aula12-pc2",
+    "name": "Conectar / liberar porta",
+    "x": 1030,
+    "y": 140,
+    "serial": "pc2-port",
+    "wires": []
+  },
+  {
+    "id": "pc2-response",
+    "type": "http response",
+    "z": "aula12-pc2",
+    "name": "Estado para a planta",
+    "x": 1030,
+    "y": 280,
+    "statusCode": "",
+    "headers": {},
+    "wires": []
+  },
+  {
+    "id": "pc2-port",
+    "type": "serial-port",
+    "name": "ESP32-C3 — selecionar no painel",
+    "serialport": "COM0",
+    "serialbaud": "115200",
+    "databits": "8",
+    "parity": "none",
+    "stopbits": "1",
+    "waitfor": "",
+    "dtr": "none",
+    "rts": "none",
+    "cts": "none",
+    "dsr": "none",
+    "newline": "\\n",
+    "bin": "false",
+    "out": "char",
+    "addchar": "",
+    "responsetimeout": "2000"
+  }
+]

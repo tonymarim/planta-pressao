@@ -1,0 +1,17 @@
+const {test}=require('node:test');
+const assert=require('node:assert/strict');
+const vm=require('node:vm');
+const fs=require('node:fs');
+const path=require('node:path');
+const source=fs.readFileSync(path.join(__dirname,'../src/controller.js'),'utf8');
+function setup(){let state;let time=10000;return {run(msg){return vm.runInNewContext('(function(){'+source+'})()', {msg,context:{get:()=>state,set:(_,v)=>state=v},node:{status(){}},Date:{now:()=>time},Math,Number,JSON,String});},get state(){return state;},advance(ms){time+=ms;}};}
+function ctl(t,payload){return t.run({topic:'control',payload});}
+function ready(t){ctl(t,{action:'connect',port:'COM3'});t.run({topic:'serial',payload:JSON.stringify({type:'ready',protocol:'AULA12-PC1-V1',channel:6,mac:'AA:BB:CC:DD:EE:FF',boot:3,busy:false})});}
+test('Inicia pausado; sem placa gera localmente sem enviar USB',()=>{const t=setup();t.run({topic:'tick'});assert.equal(t.state.generated,0);ctl(t,{action:'start'});assert.equal(t.run({topic:'tick'})[0],null);assert.equal(t.state.generated,1);assert.equal(t.state.submitted,0);});
+test('Valida porta, equipe, faixa, tipo numérico e modo',()=>{const t=setup();for(const p of [{action:'connect',port:'COM0'},{action:'connect',port:'COM3 & cmd'},{action:'configure',team:1,mode:'TESTE',pressure:11},{action:'configure',team:1,mode:'TESTE',pressure:'5'},{action:'configure',team:0,mode:'TESTE',pressure:5}])assert.equal(ctl(t,p)[2].statusCode,400);});
+test('Transmite valor fixo; aguarda callback antes de novo comando',()=>{const t=setup();ready(t);ctl(t,{action:'configure',team:2,mode:'TESTE',pressure:8.5});ctl(t,{action:'start'});assert.equal(t.run({topic:'tick'})[0].payload,'P,2,1,8.50,TESTE\n');assert.equal(t.run({topic:'tick'})[0],null);t.run({topic:'serial',payload:'{"type":"tx","ok":true,"seq":1,"equipe":2,"p_bar":8.5}'});assert.equal(t.state.completed,1);assert.ok(t.run({topic:'tick'})[0]);});
+test('Heartbeat vencido bloqueia envio sem criar fila',()=>{const t=setup();ready(t);ctl(t,{action:'start'});t.advance(2501);assert.equal(t.run({topic:'tick'})[0],null);assert.equal(t.state.submitted,0);});
+test('Retorno errado não confirma envio; não repete comando perdido',()=>{const t=setup();ready(t);ctl(t,{action:'start'});t.run({topic:'tick'});t.run({topic:'serial',payload:'{"type":"tx","ok":true,"seq":999,"equipe":1,"p_bar":5}'});assert.equal(t.state.completed,0);assert.equal(t.state.pending.seq,1);t.advance(2100);t.run({topic:'serial',payload:'{"type":"ready","protocol":"AULA12-PC1-V1","channel":6,"mac":"AA","boot":3,"busy":false}'});assert.equal(t.state.failed,1);assert.equal(t.state.pending,null);});
+test('Pausar e liberar USB impedem novas transmissões',()=>{const t=setup();ready(t);ctl(t,{action:'start'});ctl(t,{action:'pause'});assert.equal(t.run({topic:'tick'})[0],null);assert.equal(ctl(t,{action:'disconnect'})[1].payload.enabled,false);assert.equal(t.state.connected,false);});
+test('AUTO mantém pressão finita dentro da faixa',()=>{const t=setup();ctl(t,{action:'start'});for(let i=0;i<1000;i++){t.run({topic:'tick'});assert.ok(Number.isFinite(t.state.pressure)&&t.state.pressure>=0&&t.state.pressure<=10);}assert.equal(t.state.history.length,60);});
+test('JSON inválido e protocolo diferente não habilitam rádio',()=>{const t=setup();ctl(t,{action:'connect',port:'COM3'});t.run({topic:'serial',payload:'boot log'});t.run({topic:'serial',payload:'{"type":"ready","protocol":"outro","channel":6,"mac":"AA"}'});assert.equal(t.state.lastHeartbeat,0);assert.equal(t.state.invalid,2);});

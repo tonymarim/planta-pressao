@@ -1,0 +1,46 @@
+<!doctype html><html lang="pt-BR"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Aula 12 · Usina virtual / PC2</title>  <script type="module" crossorigin src="/assets/index-CZoT1Ck-.js"></script>
+  <link rel="modulepreload" crossorigin href="/assets/rolldown-runtime-DK3Fl9T5.js">
+  <link rel="modulepreload" crossorigin href="/assets/observable.pure-H-M_hi7F.js">
+  <link rel="modulepreload" crossorigin href="/assets/performanceConfigurator-UtxC_Odd.js">
+  <link rel="modulepreload" crossorigin href="/assets/engineStore-B_7KzytD.js">
+  <link rel="modulepreload" crossorigin href="/assets/math.scalar.functions-BMwEppRb.js">
+  <link rel="modulepreload" crossorigin href="/assets/math.vector.pure-Bs5Q3Ca3.js">
+  <link rel="modulepreload" crossorigin href="/assets/math.color.pure-ew2DbChK.js">
+  <link rel="modulepreload" crossorigin href="/assets/precisionDate-CfCevjl-.js">
+  <link rel="modulepreload" crossorigin href="/assets/logger-CuBYPcDK.js">
+  <link rel="modulepreload" crossorigin href="/assets/tools.functions-CkKvTgVX.js">
+  <link rel="modulepreload" crossorigin href="/assets/webRequest-dqz0dHXK.js">
+  <link rel="modulepreload" crossorigin href="/assets/halfFloat-Ce77JD5z.js">
+  <link rel="modulepreload" crossorigin href="/assets/tools.pure-924PBcXA.js">
+  <link rel="modulepreload" crossorigin href="/assets/decorators-BS-fGYfw.js">
+  <link rel="modulepreload" crossorigin href="/assets/shaderStore-D-XQlhUT.js">
+  <link rel="modulepreload" crossorigin href="/assets/webAudioBaseSubGraph-SC87iUI7.js">
+  <link rel="modulepreload" crossorigin href="/assets/abstractSoundSource-C6AH8daY.js">
+  <link rel="modulepreload" crossorigin href="/assets/meshUboDeclaration-BATNZvmb.js">
+  <link rel="modulepreload" crossorigin href="/assets/sceneUboDeclaration-B96Tfx7b.js">
+  <link rel="modulepreload" crossorigin href="/assets/sceneUboDeclaration-B5VhSG0v.js">
+  <link rel="modulepreload" crossorigin href="/assets/meshUboDeclaration-BmNu2KU_.js">
+  <link rel="modulepreload" crossorigin href="/assets/clusteredLightingFunctions-BFCOODPn.js">
+  <link rel="modulepreload" crossorigin href="/assets/clusteredLightingFunctions-DNqaoQCj.js">
+  <link rel="modulepreload" crossorigin href="/assets/ltcHelperFunctions-D8BySwCQ.js">
+  <link rel="modulepreload" crossorigin href="/assets/ltcHelperFunctions-DS3Utz6C.js">
+  <link rel="modulepreload" crossorigin href="/assets/mainUVVaryingDeclaration-B_7d0nc3.js">
+  <link rel="modulepreload" crossorigin href="/assets/objectIdFunctions-DbOLxRrm.js">
+  <link rel="modulepreload" crossorigin href="/assets/meshBlendTagFragmentOutput-BRH6s5gV.js">
+  <link rel="modulepreload" crossorigin href="/assets/samplerFragmentDeclaration-CEHqUfAO.js">
+  <link rel="modulepreload" crossorigin href="/assets/mainUVVaryingDeclaration-BBamQlxR.js">
+  <link rel="modulepreload" crossorigin href="/assets/objectIdFunctions-yylhAVFR.js">
+  <link rel="modulepreload" crossorigin href="/assets/samplerFragmentDeclaration-3yaLawFX.js">
+  <link rel="stylesheet" crossorigin href="/assets/index-7-jzYpLI.css">
+</head><body>
+<header><div><div class="eyebrow">CMVI / AULA 12 / ESTAÇÃO RECEPTORA</div><h1>Usina virtual <span>· Utilidades</span></h1></div><div class="toplinks"><span class="badge" id="source">ESP-NOW / PC2</span><a href="/red/" target="_blank" rel="noopener">Fluxo Node-RED ↗</a></div></header>
+<main><div id="banner" class="banner" role="status">Aguardando telemetria do tanque TK-101.</div>
+<div class="layout"><section class="maincol"><div class="scene-card"><div class="scene-header"><div><b>Área 01 · Ar comprimido</b><small>TK-101 / PT-101 · pressão relativa</small></div><span id="quality" class="badge">DESCONHECIDO</span></div><div class="viewport"><canvas id="plant" aria-label="Planta industrial 3D com reservatório, compressor, tubulações e passarelas"></canvas><div class="readout"><small>PRESSÃO RECEBIDA</small><div><strong id="pressure">—</strong> <span>bar(g)</span></div><small id="age">Sem amostra válida</small></div><div class="scene-hint">Arraste para orbitar · roda para aproximar <button id="camera">Restaurar vista</button></div></div><div class="scene-footer"><span id="sceneStatus">Carregando planta 3D…</span><span>PROCESSO SIMULADO · SEM SENSOR FÍSICO</span></div></div>
+<div class="metrics"><div class="metric"><small>MÉDIA / 5 AMOSTRAS</small><strong id="mean">—</strong><span>bar(g)</span></div><div class="metric"><small>AMOSTRAS VÁLIDAS</small><strong id="received">0</strong><span id="sequence">seq —</span></div><div class="metric"><small>LACUNAS / DESCARTES</small><strong id="gaps">0 / 0</strong><span>no caminho observado</span></div><div class="metric"><small>SINAL DO RÁDIO</small><strong id="rssi">—</strong><span>dBm · último pacote</span></div></div>
+<div class="card trend-card"><div class="section-title"><h2>Tendência de pressão</h2><small>Bruta <i class="dot raw"></i> Média <i class="dot avg"></i> · últimas 120 amostras</small></div><svg id="chart" viewBox="0 0 800 160" aria-label="Gráfico da pressão bruta e média, escala de zero a dez bar"><text x="0" y="15">10</text><text x="0" y="149">0</text><path d="M30 10H790M30 77H790M30 145H790" class="gridline"/><path d="M30 30H790" class="limit"/><text x="690" y="25">HH 8,5 bar</text><polyline id="raw" points=""/><polyline id="avg" points=""/></svg></div>
+<div class="card"><h2>Eventos de comissionamento</h2><ol id="events"><li>Aguardando conexão.</li></ol></div></section>
+<aside><div class="card"><h2>Enlace com o PC1</h2><label for="port">Porta USB da ESP32-C3</label><div class="inline"><input id="port" value="COM5" maxlength="8"><button class="primary" id="connect">Conectar</button></div><button id="disconnect">Liberar USB</button><p id="usb" class="status">Receptor USB não identificado</p><small id="receiver">Canal 6 · 115200 baud</small><hr><div class="fields"><div><label for="team">Equipe</label><input id="team" type="number" min="1" max="999" value="1"></div></div><label for="mac">MAC do emissor (opcional)</label><input id="mac" placeholder="Automático: vincula a primeira origem" maxlength="17"><button id="filter">Aplicar filtro</button><small id="origin">Origem ainda não vinculada.</small></div>
+<div class="card"><h2>Alarmes e intertravamento</h2><div id="alarm" class="alarm">SEM DADOS</div><p id="compressor">C-101 · parado / bloqueado</p><div class="buttons"><button id="ack">Reconhecer</button><button id="reset">Rearmar</button><button class="primary" id="start">Partir C-101</button><button id="stop">Parar C-101</button></div><small id="ackState">Sem reconhecimento.</small><small>H ≥ 7,0 · HH ≥ 8,5 bar. Rearme: dado válido e pressão ≤ 6,7 bar.</small><small>Compressor apenas virtual: estes comandos não alteram a pressão enviada pelo PC1.</small></div>
+<div id="message" role="status" aria-live="polite"></div>
+<details class="card"><summary>Demonstração sem rádio</summary><p class="muted">Fonte separada para testar cena, alarmes e perda de dados. Ao ativar, libera a USB.</p><button id="demo">Ativar DEMO local</button><label for="demoPressure">Pressão DEMO · bar(g)</label><input id="demoPressure" type="number" min="0" max="10" step="0.1" value="5"><button id="demoApply">Aplicar pressão DEMO</button><div class="buttons"><button id="demoPause">Suspender dados</button><button id="demoResume">Restaurar dados</button></div><small>Para voltar à recepção real, clique em Conectar.</small></details>
+</aside></div><footer>Os tanques de fundo são cenográficos. Pressão não representa nível de líquido. Recepção validada no PC2 não constitui confirmação de retorno ao PC1.</footer></main></body></html>

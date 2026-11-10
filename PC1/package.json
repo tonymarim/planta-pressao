@@ -1,0 +1,14 @@
+{
+  "name": "aula12-pc1-transmissor",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "build": "node scripts/build-flow.cjs",
+    "test": "node --test tests/*.test.cjs",
+    "start": "node scripts/build-flow.cjs && node node_modules/node-red/red.js --userDir runtime --settings settings.cjs flows.json"
+  },
+  "dependencies": {
+    "node-red": "4.0.9",
+    "node-red-node-serialport": "2.0.3"
+  }
+}
